@@ -74,6 +74,69 @@ and I'm not sharing the details publicly.
 - **Recommendation:** clear both parties' confirmation state on any change to the traded item
   set, and show a clear "offer changed" prompt.
 
+## Finding 5 — Client can invoke arbitrary server-side triggers with attacker-controlled context
+
+- **Where:** `lua/server/player/player_packet.lua`, `handles:ClientTrigger`. The handler calls
+  `Trigger.CheckTriggers(cfg, packet.name, context)` where `packet.name` (trigger name),
+  `packet.target` (object/block to resolve `cfg` from), `packet.obj1`, `packet.obj2`, and the
+  entire `packet.context` table are taken from the client and merged into `context`.
+- **Why it matters:** triggers are the server's game-logic/event system (rewards, state
+  changes, trade/sell events, etc.). Letting the client choose which trigger fires, against
+  which object, with an arbitrary context, means client input can drive server logic that is
+  presumably meant to be server-initiated. Depending on what each trigger does, this is a
+  potentially serious logic-abuse surface.
+- **Recommendation:** restrict `ClientTrigger` to an explicit allow-list of trigger names that
+  are safe to be client-initiated; validate that `obj1/obj2/target` belong to / are visible to
+  the calling player; ignore client-supplied context keys beyond a known schema.
+
+## Finding 6 — `EntityValue` lets the client set value keys flagged client-writable; `sinValue` is one of them
+
+- **Where:** `handles:EntityValue` + `Entity.ValueDef` (`lua/common/entity.lua`). The handler
+  accepts a client `key`/`value` and calls `setValue` as long as `ValueDef[key][2]` (the
+  "client-writable" flag) is truthy. `ValueDef.sinValue = {false, true, ...}` — i.e. the
+  crime/"sin" value is marked client-writable.
+- **Why it matters:** `sinValue` drives wanted/criminal state in some modes. A client being
+  able to set its own `sinValue` could clear a wanted status or otherwise manipulate mode
+  logic. More generally, the whole model relies on every `ValueDef` entry being correctly
+  flagged; one mistakenly-writable sensitive key is a problem, and the value is taken verbatim
+  from the client (including `BigInteger`).
+- **Recommendation:** audit every `ValueDef` client-writable flag; `sinValue` and any
+  gameplay-authority stat should be server-only. Range/type-check accepted values.
+
+## Finding 7 — Callback dispatch is driven by client-supplied identifiers and context
+
+- **Where:** `handles:DoCallBack` / `handles:DoRemoteCallback` →
+  `doCallBack(packet.modName, packet.key, packet.regId, packet.context)`. The module name,
+  callback key, registration id and context all come from the client.
+- **Why it matters:** if a client can select which registered server callback to invoke (and
+  with what context), it may be able to trigger callbacks out of their intended flow. Impact
+  depends on what plugins register, but client-chosen callback dispatch is a trust-boundary
+  risk worth reviewing.
+- **Recommendation:** bind callbacks to the session/flow that created them and verify the
+  caller is allowed to invoke that `regId`, rather than trusting client-supplied ids.
+
+## Finding 8 — `SellItem` reward derived from client-supplied quantity
+
+- **Where:** `handles:SellItem` / `handles:SellItems`. `sellNum` comes from the client;
+  reward currency is `sellNum * itemcost`. Quantity is gated by `item:consume(sellNum)`, but
+  I could not confirm `sellNum` is validated as a positive integer, nor that the currency
+  granted is reconciled against the amount actually consumed.
+- **Why it matters:** if `sellNum` can be non-positive or otherwise abnormal, or if the
+  reward trigger grants currency independently of a successful, bounded consume, this is an
+  economy-integrity risk.
+- **Recommendation:** validate `sellNum` is a positive integer ≤ owned quantity; compute and
+  grant the reward strictly from the quantity actually consumed, server-side.
+
+## Finding 9 — GM access is enabled by a map/config flag (defense-in-depth)
+
+- **Where:** `handles:GM` gate: `if not World.gameCfg.gm and not Game.HasGMPermission(...)
+  then return end`. If a map/mode ships with `gameCfg.gm` enabled, the GM command surface
+  (teleport, `GMCall`, edit-entity, debug-port set) is available to any player in it.
+- **Why it matters:** a single production/test map accidentally shipped with `gm = true`
+  would expose GM functionality to everyone in that room.
+- **Recommendation:** ensure no production map ships with `gm` enabled; prefer gating GM on
+  per-account permission only, and log/alert if a non-permitted account reaches GM.
+
 ---
 
 **Notes**

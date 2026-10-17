@@ -196,9 +196,33 @@ kurallarına aykırı, hesabı kalıcı banlatır ve çoğu zaten sunucu tarafı
   sunucuda doğrulanıyor (bkz. bölüm 2.3). İstemciyi değiştirip "menzil uzatmak"
   işe yaramaz; sunucu sınırın dışındaki vuruşu düşürür.
 
+### 5.1 Sunucu güven sınırı bulguları (geliştiriciye bildirmek için)
+
+Aşağıdakiler statik analizden çıkan, **düzeltilmesi için geliştiriciye bildirilmeye değer**
+zayıflıklar. Exploit değil, "şu handler şuna güveniyor → şöyle sıkılaştırın" seviyesinde.
+Tam metin + çözüm önerileri: `docs/security_disclosure_email.md`.
+
+- **`ClientTrigger` — istemci keyfi sunucu-trigger'ı çağırabiliyor (en yüksek).**
+  `server/player/player_packet.lua` → `Trigger.CheckTriggers(cfg, packet.name, context)`;
+  trigger adı, hedef obje ve tüm context istemciden geliyor. Trigger'lar ödül/durum
+  mantığını yürütüyor. **Öneri:** istemciden çağrılabilecek trigger'lar için beyaz liste +
+  obje sahipliği doğrulaması.
+- **`EntityValue` + `sinValue` istemci-yazılabilir (orta).** `ValueDef.sinValue = {false,
+  true, ...}` → suç/"sin" değeri istemciden set edilebiliyor. **Öneri:** tüm ValueDef
+  "client-writable" bayraklarını denetle; otorite gerektiren statlar sunucu-only olsun.
+- **`DoCallBack`/`DoRemoteCallback` — callback dağıtımı istemci id'leriyle (orta).**
+  modName/key/regId/context istemciden. **Öneri:** callback'i oluşturan oturuma bağla,
+  çağıran yetkisini doğrula.
+- **`SellItem` — ödül istemci miktarından (orta/düşük).** `sellNum` istemciden, ödül
+  `sellNum*itemcost`. **Öneri:** `sellNum`'u pozitif tamsayı ve sahip olunan ≤ miktar diye
+  doğrula; ödülü yalnızca gerçekten tüketilen miktardan hesapla.
+- **GM, map config bayrağıyla açılıyor (defense-in-depth).** `World.gameCfg.gm` açık bir
+  haritada GM herkese açılır. **Öneri:** üretim haritalarında `gm` kapalı; GM'i yalnızca
+  hesap yetkisine bağla.
+
 **Özet:** Bu artıklar çoğunlukla QA/geliştirici amaçlı ve kritik işlemler (ödül, eşya,
 menzil, takas) sunucuda doğrulanıyor. Bir avantaja çevirmek için verilebilecek pratik bir
-yol yok; denemek banla sonuçlanır. Bu yüzden yukarıdakileri sadece "kodda ne var" diye
+yol yok; denemek banla sonuçlanır. Yukarıdakileri "kodda ne var" + "nasıl düzeltilir" diye
 belgeliyorum, istismar rehberi olarak değil.
 
 ---
