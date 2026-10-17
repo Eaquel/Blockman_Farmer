@@ -203,6 +203,27 @@ and I'm not sharing the details publicly.
 - **Recommendation:** verify cosmetic ownership server-side before applying/broadcasting a
   skin change; don't rely solely on the client sending only owned items.
 
+## Finding 15 — Family/clan chat membership is gated only by an entity value
+
+- **Where:** `plugins/chat/server/player/player_chat_packet.lua`, `ChatMessageToFamily` (and
+  the `platform_chat` / `new_platform_chat` equivalents). Family-channel delivery iterates
+  `Game.GetAllPlayers()` and sends to everyone whose `getValue(World.cfg.chatSetting.familyVal)`
+  equals the sender's. Membership is thus determined entirely by one entity value.
+- **Why it matters:** if `familyVal` is ever client-writable (see Finding 6 — `EntityValue`
+  lets clients set value keys flagged writable), a player could set their own familyId to any
+  clan's id and then read from / post into that clan's chat channel. Even without that, the
+  value should be strictly server-assigned.
+- **Recommendation:** make the family/clan membership value server-authoritative; never allow
+  it to be set via `EntityValue`; derive the family channel from the account's real clan
+  membership on the platform side, not from a mutable entity value.
+
+> **Scope note (clan requests / donations / traditions):** the join-request, donation, task
+> and "heritage/tradition" logic for clans is **not** in these game-server Lua packages. It
+> runs on the platform API (`gw.sandboxol.com`) and the APK client module `com.sandboxol`
+> (clan). Only client-side code is available here, so those flows could not be audited and no
+> findings are claimed for them. Reviewing them properly requires the platform/API server
+> code, which I did not analyse.
+
 ---
 
 **Notes**
