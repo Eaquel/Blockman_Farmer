@@ -1,0 +1,7 @@
+# Oyun dosyaları ve decompile çıktısı repoya girmez (telif)
+*.zip
+assets/
+dec/
+work/
+tools/unluac.jar
+__pycache__/
