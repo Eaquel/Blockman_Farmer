@@ -137,6 +137,46 @@ and I'm not sharing the details publicly.
 - **Recommendation:** ensure no production map ships with `gm` enabled; prefer gating GM on
   per-account permission only, and log/alert if a non-permitted account reaches GM.
 
+## Finding 10 — Chat profanity/word filter can be bypassed with a client-set field
+
+- **Where:** `lua/server/player/player_packet.lua`, `handles:ChatMessage`. The server applies
+  `self:wordFilter(packet.msg)` **only when `packet.voiceTime` is absent**; if the client
+  includes a `voiceTime` field, the branch takes `msg = packet.msg` (raw, unfiltered) and then
+  broadcasts it (world chat / `SEND_CHAT_MESSAGE` trigger / `WorldServer.ChatMessage`).
+- **Why it matters:** a client can send a text chat message that skips the word filter simply
+  by attaching a `voiceTime` value, defeating content moderation on text chat.
+- **Recommendation:** apply the word filter based on the actual message type/content, not the
+  mere presence of `voiceTime`; filter all text that is broadcast as text, and validate that
+  `voiceTime` only accompanies genuine voice messages.
+
+## Finding 11 — Chest interaction trusts a client-supplied position (no proximity/ownership check)
+
+- **Where:** `handles:SwitchChestItem` / `handles:SwitchNpcChestItem`. The chest is resolved
+  from `self.map:getBlockData(packet.chestPos)` using the client-supplied `chestPos`; the base
+  handler does not appear to verify the player is in range of, or permitted to access, that
+  chest (access control is left to optional `CHECK_PUT_INTO_CHEST` / `CHECK_TAKE_FROM_CHEST`
+  triggers that a given mode may or may not implement).
+- **Why it matters:** if a mode doesn't add its own checks, a player could move items to/from
+  a chest at arbitrary coordinates they name, without being near it (interact-from-anywhere).
+  Also, an invalid `chestPos` (no `.tray`) would error in the handler.
+- **Recommendation:** in the base handler, validate `chestPos` resolves to a real container,
+  that the player is within interaction range, and that access is permitted; reject otherwise.
+
+## Finding 12 — Missing bounds / positivity validation on client indices and counts
+
+- **Where:**
+  - `handles:RoutineCommit`: `routine[packet.typeIndex].content` is indexed with the
+    client's `typeIndex` without a bounds/nil check (malformed value → handler error).
+  - `Player:splitTrayItem` (`server/player/player.lua`): `splitCount` is checked
+    `>= stack_count` → false, but is **not** checked `> 0`, so zero/negative split counts are
+    not rejected.
+- **Why it matters:** unvalidated client indices can crash handlers (local DoS / unexpected
+  state), and non-positive counts in stack-splitting are a classic source of quantity/duplication
+  anomalies depending on downstream add/remove logic.
+- **Recommendation:** validate every client-supplied index exists before use, and require
+  counts to be positive integers within the owned amount; treat item moves/splits as atomic
+  transactions so a failure can't leave duplicated or orphaned stacks.
+
 ---
 
 **Notes**

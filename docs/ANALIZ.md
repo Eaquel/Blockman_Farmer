@@ -219,6 +219,18 @@ Tam metin + çözüm önerileri: `docs/security_disclosure_email.md`.
 - **GM, map config bayrağıyla açılıyor (defense-in-depth).** `World.gameCfg.gm` açık bir
   haritada GM herkese açılır. **Öneri:** üretim haritalarında `gm` kapalı; GM'i yalnızca
   hesap yetkisine bağla.
+- **Sohbet kelime filtresi `voiceTime` ile atlanabiliyor (orta).** `ChatMessage` handler'ı
+  filtreyi yalnızca `packet.voiceTime` yokken uyguluyor; istemci bu alanı eklerse mesaj
+  **filtresiz** yayınlanıyor. **Öneri:** filtreyi mesaj tipine göre uygula, `voiceTime`
+  yalnızca gerçek sesli mesajla gelsin.
+- **Chest etkileşimi istemci konumuna güveniyor (orta).** `SwitchChestItem` sandığı
+  `packet.chestPos`'tan çözüyor; temel handler mesafe/sahiplik doğrulamıyor (yalnızca moda
+  bağlı trigger'lara bırakılmış). **Öneri:** gerçek sandık mı, oyuncu menzilde mi, erişim
+  izni var mı — temel handler'da doğrula.
+- **Girdi doğrulama eksikleri (düşük/robustluk).** `RoutineCommit` `typeIndex`'i sınır
+  kontrolsüz indeksliyor (hatalı değer → crash); `splitTrayItem` `splitCount`'u `> 0` diye
+  kontrol etmiyor (yalnızca `< stack_count`). **Öneri:** her istemci indeksini kullanmadan
+  önce doğrula, miktarları pozitif tamsayı iste, taşıma/bölme işlemlerini atomik yap.
 
 **Özet:** Bu artıklar çoğunlukla QA/geliştirici amaçlı ve kritik işlemler (ödül, eşya,
 menzil, takas) sunucuda doğrulanıyor. Bir avantaja çevirmek için verilebilecek pratik bir
