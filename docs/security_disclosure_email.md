@@ -177,6 +177,32 @@ and I'm not sharing the details publicly.
   counts to be positive integers within the owned amount; treat item moves/splits as atomic
   transactions so a failure can't leave duplicated or orphaned stacks.
 
+## Finding 13 — Chat word-filter bypass is systemic across all channels (consolidates Finding 10)
+
+- **Where:** `lua/plugins/chat/server/player/player_chat_packet.lua` — `ChatMessage`,
+  `ChatMessageToFamily`, `ChatMessageToPrivate` all use the same pattern:
+  `if not packet.voiceTime then msg = self:wordFilter(packet.msg) end`, then broadcast the
+  message with `voiceTime` attached. The `msg` text is forwarded even for "voice" messages,
+  and nothing verifies that a message tagged with `voiceTime` actually carries audio rather
+  than arbitrary attacker-chosen text.
+- **Why it matters:** the content filter can be skipped in world, family and private chat by
+  tagging a text message as voice. This is a moderation/safety gap affecting every channel.
+- **Recommendation:** filter the broadcast text regardless of `voiceTime`; validate that a
+  voice message carries a genuine audio payload and no arbitrary `msg` text; apply the voice
+  quota check atomically with consumption.
+
+## Finding 14 — Appearance/skin application does not verify ownership (review recommendation)
+
+- **Where:** `EntityServer:changeSkin` / `changeSkinPart` (`lua/server/entity/entity.lua`)
+  apply whatever skin data they are given and broadcast it; the in-match layer itself does
+  not check that the player owns the cosmetic being applied (ownership is presumably enforced
+  by the account/dressup service, which I did not analyse).
+- **Why it matters:** if any client-reachable path can drive skin application with arbitrary
+  cosmetic ids, a player could appear to wear items they don't own. This is a cosmetic/economy
+  integrity concern rather than a safety one.
+- **Recommendation:** verify cosmetic ownership server-side before applying/broadcasting a
+  skin change; don't rely solely on the client sending only owned items.
+
 ---
 
 **Notes**
