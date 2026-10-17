@@ -1,10 +1,18 @@
 # Blockman GO – Assets Analizi (Decompile)
 
-Kaynak: Drive'daki `Test_Blockman_Assets.zip` (233 MB, 13.343 dosya, istemci sürümü `4.1383.0.0`).
-Yöntem: Lua 5.3 bytecode dosyaları `unluac` ile decompile edildi (1.399 dosyadan 1.397'si başarılı, ~11 MB okunabilir Lua).
-Tekrar üretmek için: `tools/decompile.sh <zip>`.
+Kaynaklar:
+- `Test_Blockman_Assets.zip` (233 MB) — oyun motoru kaynakları, istemci sürümü `4.1383.0.0`.
+- `Test_Blockman_base.zip` (140 MB) — ana APK (`com.sandboxol.blockymods` v3.29.3, kod 5753).
+- `Test_Blockman_armv8.zip` (19 MB) — arm64-v8a native kütüphaneler (SDK + koruma).
+- `Test_Blockman_xxhdpi.zip` (275 KB) — sadece arayüz görselleri (178 webp/png).
 
-> Oyunun kendi kodu bu repoya konmadı. Burada sadece analiz ve kendi yazdığımız araçlar var.
+Yöntem: Lua 5.3 bytecode → `unluac`; Android dex → `jadx`; native `.so` → `readelf`+`strings`
+(sadece tanımlama, kırma yok); AndroidManifest → `androguard`.
+Tekrar üretmek için: `tools/decompile.sh` ve bölüm 9'daki komutlar.
+
+> Oyunun kendi kodu bu repoya konmadı (telif). Burada sadece analiz ve kendi yazdığımız araçlar var.
+> Kullanıcının isteği üzerine `.so` korumasının **hangi yöntem olduğu** tanımlandı; şifre/DRM
+> **kırılmadı**. İstismar/bug/dupe/bot avı yapılmadı — nedeni bölüm 10'da.
 
 ---
 
@@ -193,13 +201,141 @@ menzil, takas) sunucuda doğrulanıyor. Bir avantaja çevirmek için verilebilec
 yol yok; denemek banla sonuçlanır. Bu yüzden yukarıdakileri sadece "kodda ne var" diye
 belgeliyorum, istismar rehberi olarak değil.
 
-## 6. Neler yapılmadı ve neden
-- `.so` motor dosyaları şifreli/paketli. Korumayı kırmak gerektiği için açılmadı.
-- Çalışır hile, hız/menzil hilesi, otomatik bot ya da reklam ödülü atlatma **üretilmedi**.
-  Sunucu menzil, bekleme süreleri ve ödülleri kendisi kontrol ediyor; ayrıca bunlar
-  hesabın banlanmasına yol açar.
+---
 
-## 7. Sonraki adımlar
+# BÖLÜM II – APK Analizi (base + armv8 paketleri)
+
+## 6. Uygulama kimliği ve yapısı
+- **Paket:** `com.sandboxol.blockymods` — sürüm **3.29.3** (kod 5753), compileSdk 36.
+- **Yayıncı:** GVERSE INTERNATIONAL PTE. LTD. (Singapur) — eski SandboxOL/Blockman markası.
+- **Kod:** 30 adet `classes*.dex` (~140 MB), Java/Kotlin. `jadx` ile decompile edildi.
+- **İstemci modül haritası (dex'teki sınıf sayısına göre):**
+  `center` (çekirdek/ağ, 7764), `blockymods` (ana uygulama, 5677), `common` (3028),
+  `newvip` (1452), `login` (942), `decorate` (giydirme, 911), `gameroom` (772),
+  `greendao` (yerel DB, 662), `imchat` (sohbet, 615), `mining`, `passcard`, `randomstore`,
+  `randomdraw`, `continuousrechargechest`, `gift`, `redeem` (kod bozdurma) …
+- Oyun motoru (`libBlockMan*.so`) bu APK'da değil; ilk `Assets.zip`'in `lib/` klasöründe.
+
+## 7. `.so` koruma / şifreleme yığını (kullanıcının asıl sorusu)
+
+> Aşağıdakiler **tanımlamadır**: ELF bölüm adları ve string imzalarından "hangi koruma
+> kullanılmış" sorusunu cevaplar. Hiçbiri **kırılmadı/çözülmedi**; amaç mimariyi belgelemek.
+
+Oyun **tek değil, çok katmanlı/çok firmalı** bir koruma kullanıyor:
+
+| Kütüphane | Firma / Ürün | Ne yapar | Nasıl anlaşıldı |
+|---|---|---|---|
+| `libnesec.so`, `libnesec-x86.so` | **NetEase nesec** | Anti-cheat + kod paketleyici (packer) | ELF'te standart dışı bölümler: `.gnu.fragment`, `.eh_intent`, `.gnu.draft`, `.gnu.stub`; string'ler silinmiş; `mprotect` ile çalışma anında kod açma |
+| `libNetHTProtect.so` | **NetEase HTProtect** | Anti-cheat SDK (bütünlük, hook/emülatör tespiti) | `com/netease/htprotect/...` sınıf yolları; gömülü `ENCRYPTED PRIVATE KEY`; Obfuscator-LLVM ile derlenmiş |
+| `libturingantibot_oversea.so` | **Tencent Turing (TuringFD)** | Bot/sahtekârlık tespiti (denizaşırı sürüm) | `com/tencent/turingfd/sdk/antibot_oversea`; `TuringFD v%d`; Obfuscator-LLVM |
+| `libpglarmor.so`, `libbuffer_pgl.so`, `libfile_lock_pgl.so`, `libnms.so` | **ByteDance PGL** | Kripto/koruma katmanı, dosya kilidi | `com.bytedance.sdk.component.pglcrypt.PglCryptUtils`; ByteDance iç güvenlik NDK'si (`git.byted.org:security/android-ndk-llvm`) |
+
+- **Paketleme imzası:** `libnesec.so`'da string sayısı neredeyse sıfır ve bölüm adları
+  olağandışı → kod şifreli/paketli ve çalışırken `mprotect` ile açılıyor (klasik packer davranışı).
+  Motor `libBlockMan*.so` de aynı şekilde string vermiyor → aynı yöntemle korunmuş.
+- **Derleyici:** Koruma kütüphaneleri **Obfuscator-LLVM (O-LLVM)** ile derlenmiş; kontrol
+  akışı düzleştirme/sahte dal gibi obfuscation bu yüzden var.
+- **Oyuncu/geliştirici için anlamı:** İstemci üzerinde bellek/dosya değiştirerek yapılan
+  hileler bu üç bağımsız sistem (nesec + HTProtect + Turing) tarafından tespit edilmeye
+  çalışılır → ban riski. Kendi oyununu geliştiren biri için: Blockman ekosistemi istemciye
+  güvenmiyor, kritik mantığı sunucuda tutuyor.
+
+## 8. Üçüncü taraf SDK envanteri (native + dex)
+
+| Alan | SDK | Kütüphane/iz |
+|---|---|---|
+| **Sohbet & sesli** | **RongCloud** IM + RTC | `libRongIMLib.so`, `libRongRTCLib.so`, `lib_Rong_ffmpeg.so`, manifest'te `RONG_*` izinleri |
+| **Ses motoru** | **FMOD** | `libfmod.so` |
+| **Konuşma→yazı** | Tencent Cloud ASR | `libqcloud_asr_realtime.so` |
+| **Yerel depolama** | Tencent **MMKV** + SQLite + GreenDAO | `libmmkv.so`, `libsqlite.so`, `com/sandboxol/greendao` |
+| **Loglama/APM** | Tencent Mars xlog, APM Insight | `libmarsxlog.so`, `libapminsighta/b.so` |
+| **Reklam mediasyonu** | **TradPlus** + AdMob, InMobi, Pangle, AudienceNetwork | `api.tradplusad.com`, AdMob app-id `ca-app-pub-8561668117424705`, `assets/iads`, `assets/audience_network` |
+| **Analitik/altyapı** | Firebase (Analytics, Messaging, Crashlytics), Google Play Services | `.properties` dosyaları, `c2dm` izni |
+| **Ödeme** | Google Play Billing | `com.android.vending.BILLING`, `billing.properties` |
+| **Push** | NetEase push | `libpush.so` |
+| **Avatar önizleme** | ClothesPreview (3B) | `libClothesPreview.so` |
+
+**API ağ geçidi:** `gw.sandboxol.com` (ana), `www.blockmango.com`. Ödeme Google Play Billing
+üzerinden; satın alma sunucuda doğrulanır (istemci tarafı tek başına eşya veremez).
+
+> Not: API kimlik doğrulama/token imzalama ayrıntısına **girilmedi** — bu, API saldırı
+> yüzeyini haritalamak olur. İstek üzerine durduruldu (bölüm 10).
+
+## 9. İzinler (36 adet, dikkat çekenler)
+`CAMERA`, `RECORD_AUDIO` (sesli sohbet), `FOREGROUND_SERVICE_MEDIA_PROJECTION` (oyun içi
+ekran kaydı), `READ_PHONE_STATE`, `READ/WRITE_EXTERNAL_STORAGE`, `GET_TASKS`,
+`KILL_BACKGROUND_PROCESSES`, `WRITE_SETTINGS`, `com.android.vending.BILLING`, reklam kimliği
+izinleri (`AD_ID`, `ACCESS_ADSERVICES_*`). Üretici mağaza izinleri (Huawei, Samsung) da var.
+
+## 10. Tüm oyun modları (`assets/game_list.json`)
+Toplam **85 mod**: 38 resmi (`g1xxx`) + 47 kullanıcı yapımı (`g2xxxxx`). Resmi modların
+kod→isim eşlemesi (rapordaki mekanikler bu kodlara göre):
+
+| Kod | Mod | Kod | Mod | Kod | Mod |
+|---|---|---|---|---|---|
+| g1001 | Survival Games | g1017 | Hide and Seek | g1031 | **Ranchers** (çiftlik) |
+| g1002 | Sky Wars | g1018 | Egg War | g1032 | Blockman Strike |
+| g1007 | Bow Spleef | g1019 | Aliens Attack | g1036 | Ender vs Slender |
+| g1008 | **Bed Wars** | g1020 | Mini Town | g1041 | Bird Simulator |
+| g1009 | Murder Mystery | g1021 | Rainbow Parkour | g1042 | Build and Shoot |
+| g1010 | TNT Run | g1022 | Capture Flag | g1047 | Realm City |
+| g1011 | Snowball Battle | g1023 | Build Battle | g1048 | **Sky Block** |
+| g1013 | Zombie Infecting | g1024 | Gem Knight | g1051 | The Walking Dead |
+| g1014 | Jail Break | g1025 | Hero Tycoon 2 | g1053 | Battle Royale |
+| g1015 | Treasure Hunter | g1026 | TNT Tag | g1054 | Lucky Block: Skywars |
+| g1016 | PUBG:Battle Field | g1027 | Sky Royale | g1055 | WWE School Simulator |
+| | | g1028 | Ultimate Fighting | g1057 | TD: Angry Pets |
+| | | g1029 | Mega Walls | | |
+| | | g1030 | Snowman Defender | | |
+
+Kullanıcı modlarından bazıları: The Bridge, Mobile Legends, Clan Wars, 1v1, Cake War,
+Juggernaut, Mario go up, Piranha Park…
+
+## 11. Klan ve VIP ekonomisi (`assets/clan_*.json`)
+- **VIP seviyeleri (4):** altın/elmas XP ve görev-para kazancı çarpanı artıyor.
+  - L0 (VIP yok): x1.0 · **VIP:** x1.2 · **VIP+:** x1.5 · **MVP:** x2.0
+  - Bağış limiti de artıyor (altın bağışı: x1.0 → x1.5 → x2.0 → x3.0).
+  - **Oyuncu için:** VIP, kazancı doğrudan 2 katına kadar çıkarıyor; en çok görev/klan
+    aktivitesi yapan oyuncuda etkisi büyük.
+- **Klan seviyeleri (9):** üye kapasitesi L1'de 20 → L9'da 36. Her seviye görev sayısı,
+  günlük bağış limiti ve yükseltme için gereken deneyimi artırıyor.
+
+## 12. Nasıl yeniden üretilir (geliştiriciler için)
+```bash
+# Lua (ilk Assets.zip)
+tools/decompile.sh Test_Blockman_Assets.zip
+
+# APK dex -> Java
+jadx -j4 -r --no-debug-info -d out base/classes*.dex
+
+# .so koruma tanımlama (kırmadan)
+readelf -S lib/arm64-v8a/libnesec.so      # standart dışı bölümler = packer
+strings -n6 lib/arm64-v8a/libNetHTProtect.so | grep -i netease
+
+# Manifest çözme
+python3 -c "from androguard.core.axml import AXMLPrinter; \
+print(AXMLPrinter(open('AndroidManifest.xml','rb').read()).get_xml().decode())"
+```
+
+---
+
+# BÖLÜM III – Sınırlar
+
+## 13. Neler yapılmadı ve neden
+- **`.so` korumaları kırılmadı.** nesec/HTProtect/Turing/PGL yalnızca *tanımlandı* (bölüm 7).
+  Şifre/paketleme çözmek koruma atlatmaktır; yapılmadı.
+- **API kimlik doğrulama/imzalama incelenmedi.** Token/imza mantığını araştırmak sunucuya
+  saldırı yüzeyini haritalamak olurdu; bu yön bilerek durduruldu (bir otomatik güvenlik
+  kontrolü de bu aramayı engelledi, doğru bir engelleme).
+- **İstismar/bug/dupe/bot avı yapılmadı.** "Sohbete şunu yazınca bug oluyor" türü glitch
+  aramak ve bunları kullanma rehberi çıkarmak, oyunu bozmaya/haksız avantaja yönelik olur.
+  Bunun yerine gerçek güven zafiyetleri (örn. reklam ödülünün istemciden bildirilmesi, takas
+  onay akışı) **savunma amaçlı**, silahlandırılmadan bölüm 5'te not edildi.
+- Kritik işlemler (para, eşya, menzil, takas, ödeme) sunucuda doğrulanıyor; istemci
+  tarafı müdahale hem işe yaramaz hem üç ayrı anti-cheat yüzünden ban getirir.
+
+## 14. Sonraki adımlar
 1. `recipe/*.json` + `RanchItems.csv` → aranabilir **tarif ve çiftlik planlayıcısı** (web sayfası).
 2. Skyblock modunun indirilen dosyaları (`g1048`) telefondan alınırsa aynı yöntemle analiz edilip ada ekonomisi ve mağaza fiyatları çıkarılabilir.
 3. Blockman Editor ile kendi Skyblock benzeri modunu yapmak. `editor_template` eklentisi bu sistemin bir örneği.
+4. Klan/VIP çarpanları ve mod listesi → oyuncular için "hangi modda ne kazanılır" rehberi.
