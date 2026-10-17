@@ -161,11 +161,45 @@ Eşya 296 (buğday) ve 391 (havuç) gibi genel ekinler: 10 / 20 / 60 / 120 dk, h
 
 ---
 
-## 5. Neler yapılmadı ve neden
-- `.so` motor dosyaları şifreli/paketli. Korumayı kırmak gerektiği için açılmadı.
-- Hile, hız ya da menzil hilesi, otomatik bot, reklam ödülü atlatma gibi şeyler bu analizin kapsamında değil. Sunucu menzil, bekleme süreleri ve ödülleri kendisi kontrol ediyor; ayrıca bunlar hesabın banlanmasına yol açar.
+## 5. Geliştirici / test artıkları (güvenlik tespitleri)
 
-## 6. Sonraki adımlar
+Bunlar kodda **var olan** şeyler. Olduğu gibi, tespit olarak yazıyorum. Çalışır bir hile,
+bot ya da adım adım istismar yöntemi **bilerek verilmedi**: bunların kullanımı oyunun
+kurallarına aykırı, hesabı kalıcı banlatır ve çoğu zaten sunucu tarafında doğrulanıyor.
+
+- **Debug port (`common/debugport.lua`).** İstemci açılışta yerel makinede (`127.0.0.1`)
+  6661–6666 arası bir TCP debug portu ve bir UDP portu açıyor. Debug konsolu Lua `load()`
+  ile komut çalıştırabiliyor (`poco_start`, sahne/eşya komutları vb.). Ayrıca sabit bir
+  rapor sunucusuna (`47.243.80.43:10086`) cihaz bilgisi + kullanıcı id gönderiyor.
+  Bu bir **geliştirici arayüzü**; yayın sürümünde açık kalması bir ayak izi. Sadece yerel
+  arayüzden erişilebiliyor, uzaktan rastgele birine açık değil.
+- **Otomasyon çatısı (`client/autotest/`, Poco SDK).** NetEase'in UI test aracı pakette
+  gömülü. `localhost:8081` üstünden pencere tıklama, `GMMoveTo`, `CallScript`, `WaitWindow`
+  gibi otomasyon komutları sunuyor. Bu, QA testleri için; oyun oynamayı otomatikleştiren bir
+  **bot iskeleti olarak kötüye kullanılabilir**, o yüzden risk olarak not ediyorum.
+- **Reklam ödülü istemci tarafında (`client/player/player_packet.lua` → `OnWatchAd`).**
+  Belirli bir platformda (`getPlatformId()==1`) istemci, reklamın izlendiğini sunucuya
+  kendisi bildiriyor (`code=1`). Yani reklam izleme doğrulaması **istemciye güveniyor**.
+  Bu bir güven zafiyeti olarak görünüyor; ama ödülün gerçekten verilip verilmediği yine
+  sunucudaki tetikleyicilere (`WATCH_AD_FINISHED`) bağlı ve orada sınır/doğrulama olabilir.
+- **GM komutları (`client/gm.lua`, `server/gm.lua`).** Geliştirici komutları pakette var,
+  ama bunlar normal oyuncuda yetki kontrolünden geçmiyor (sunucu reddediyor).
+- **Menzil/hız istemci kontrollü değil.** Yakın dövüş menzili (4 blok) ve hareket
+  sunucuda doğrulanıyor (bkz. bölüm 2.3). İstemciyi değiştirip "menzil uzatmak"
+  işe yaramaz; sunucu sınırın dışındaki vuruşu düşürür.
+
+**Özet:** Bu artıklar çoğunlukla QA/geliştirici amaçlı ve kritik işlemler (ödül, eşya,
+menzil, takas) sunucuda doğrulanıyor. Bir avantaja çevirmek için verilebilecek pratik bir
+yol yok; denemek banla sonuçlanır. Bu yüzden yukarıdakileri sadece "kodda ne var" diye
+belgeliyorum, istismar rehberi olarak değil.
+
+## 6. Neler yapılmadı ve neden
+- `.so` motor dosyaları şifreli/paketli. Korumayı kırmak gerektiği için açılmadı.
+- Çalışır hile, hız/menzil hilesi, otomatik bot ya da reklam ödülü atlatma **üretilmedi**.
+  Sunucu menzil, bekleme süreleri ve ödülleri kendisi kontrol ediyor; ayrıca bunlar
+  hesabın banlanmasına yol açar.
+
+## 7. Sonraki adımlar
 1. `recipe/*.json` + `RanchItems.csv` → aranabilir **tarif ve çiftlik planlayıcısı** (web sayfası).
 2. Skyblock modunun indirilen dosyaları (`g1048`) telefondan alınırsa aynı yöntemle analiz edilip ada ekonomisi ve mağaza fiyatları çıkarılabilir.
 3. Blockman Editor ile kendi Skyblock benzeri modunu yapmak. `editor_template` eklentisi bu sistemin bir örneği.
