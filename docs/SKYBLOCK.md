@@ -98,6 +98,41 @@ Attack puanı güç formülünde ×20 ama dönüşüm oranı 1 — yani saldır�
   christmas, vf_app_activity.
 - **Anti-hile:** `cheat_detect` + `db_lock` (SkyBlock'ta da aktif).
 
+## 4.1 Sezon setleri (topluluk kaynakları — doğrulanmamış)
+
+SkyBlock sürekli yeni **sezon seti** ekliyor. Topluluk wiki'lerinden derlenen liste
+(isimler kaynaklar arasında biraz değişiyor, numaralandırma kesin değil):
+
+S1 Necrotic (Gangrene) · S2 Nightmare Knight · S3 Silverfang · S4 Astral · S5 Angelic ·
+S6 Forest Guardian · … · S15 Frost Lord · S17 Black Rose · S18 Stars & Moon · S19 Elf ·
+S20 Shark · S21 Cloud · S22 Raven · S23 Blaze State · S24 Nebula · … (sezon sayısı büyüyor,
+bir TikTok S42'den söz ediyor).
+Kaynak: [Fandom – SkyBlock](https://blockman-go-blocky-mods.fandom.com/wiki/SkyBlock),
+[NamuWiki](https://en.namu.wiki/w/Skyblock%20for%20Blockman%20GO).
+
+## 4.2 Bulunabilen sayısal statlar (topluluk — doğrulanmamış)
+
+Kesin statlar oyun paketinde açık değil (bkz. baştaki not). Web'de bulunabilen parçalar:
+
+| Öğe | Değer | Kaynak |
+|---|---|---|
+| **Odin seti** | ~60 HP, ~23 DEF, tam set ~2.4M coin, silahı **Gram** | [Fandom – Odin armor](https://blockman-go-blocky-mods.fandom.com/wiki/Odin_armor) |
+| **Ice Dragon Sword** | 20 hasar | [NamuWiki](https://en.namu.wiki/w/Skyblock%20for%20Blockman%20GO) |
+| Set bonusları genel biçim | "HP +6", "DEF +0.5" gibi küçük toplanır bonuslar | [FunPay ilanları](https://funpay.com/en/lots/1241/) |
+
+> **Uyarı:** Topluluk tier-list'leri **çelişkili** — kimi **Hades**'i 1 numara sayıyor,
+> kimi Odin'i düşük. Bu sayılar güncellemelerle değişiyor; resmi değil.
+
+## 4.3 Kaynak erişim durumu (dürüst not)
+- `res.pack` (10 MB): tamamen sıkıştırılmış, okunabilir stat yok (kırılmadı).
+- Fandom & NamuWiki: Cloudflare JS koruması yüzünden bu ortamdan **açılamadı** (403).
+  Sayılar yukarıda arama motorunun özetlediği parçalardan; tam tablo için wiki'ye
+  tarayıcıdan bakmak gerekiyor.
+- YouTube "value list" videoları: stat değil, **takas değeri** listeleri; ayrıca video
+  içeriği izlenemiyor.
+- **Kesin per-set/per-sword sayıları için tek güvenilir yol:** oyun-içi item ekranı
+  (ekran görüntüsü) → birebir tabloya dökülebilir.
+
 ## 5. Diğer veriler
 - **Sandık limiti:** 70 (`ItemChest.yml`).
 - **Blok id → ad eşlemesi:** `id_mappings.ini` (ör. 1360=white_light, 2367+ özel bloklar).
